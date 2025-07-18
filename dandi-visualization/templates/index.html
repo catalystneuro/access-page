@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DANDI Archive Downloads Visualization</title>
+    
+    <!-- CSS Libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- JavaScript Libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>DANDI Archive Downloads Visualization</h1>
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Total Downloads:</span>
+                    <span id="total-bytes" class="stat-value">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Datasets:</span>
+                    <span id="total-datasets" class="stat-value">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Countries:</span>
+                    <span id="total-countries" class="stat-value">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Regions:</span>
+                    <span id="total-regions" class="stat-value">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Controls -->
+        <div class="controls">
+            <div class="control-group">
+                <label for="dataset-filter">Filter by Dataset:</label>
+                <select id="dataset-filter">
+                    <option value="ALL">All Datasets</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <button id="reset-view" class="btn">Reset View</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Map Panel -->
+            <div class="panel map-panel">
+                <h2>Global Download Distribution</h2>
+                <div id="map" class="map-container"></div>
+                <div class="map-legend">
+                    <div class="legend-item">
+                        <div class="legend-circle small low-volume"></div>
+                        <span>Low Volume</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-circle medium medium-volume"></div>
+                        <span>Medium Volume</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-circle medium medium-high-volume"></div>
+                        <span>Medium-High Volume</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-circle large high-volume"></div>
+                        <span>High Volume</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Panel -->
+            <div class="panel charts-panel">
+                <!-- Chart Header with Controls -->
+                <div class="chart-header">
+                    <h3 id="chart-title">Global Downloads Over Time</h3>
+                    <div class="chart-controls">
+                        <div class="toggle-group">
+                            <label for="cumulative-toggle">Cumulative:</label>
+                            <input type="checkbox" id="cumulative-toggle" class="toggle-checkbox">
+                        </div>
+                        <button id="show-global-btn" class="btn" style="display: none;">Show Global Data</button>
+                    </div>
+                </div>
+                
+                <!-- Single Chart Container -->
+                <div class="chart-container">
+                    <div id="main-chart" class="chart">
+                        <div class="empty-state">
+                            <p>Loading download data...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>Loading DANDI data...</p>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+</body>
+</html>
