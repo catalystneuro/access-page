@@ -3,6 +3,7 @@ const MapVisualization = {
     map: null,
     markersLayer: null,
     selectedMarker: null,
+    colorScheme: 'volume', // 'volume' or 'datasets'
 
     init() {
         this.initializeMap();
@@ -67,23 +68,39 @@ const MapVisualization = {
             .filter(region => region.total_bytes > 0)
             .sort((a, b) => a.total_bytes - b.total_bytes);
 
-        // Calculate size scaling for bubbles
+        // Calculate size scaling for bubbles (always based on volume)
         const maxBytes = Math.max(...sortedRegions.map(r => r.total_bytes));
         const minBytes = Math.min(...sortedRegions.map(r => r.total_bytes));
         const logMax = Math.log(maxBytes);
         const logMin = Math.log(minBytes);
 
+        // Calculate color scaling based on selected scheme
+        let colorMax, colorMin, colorLogMax, colorLogMin;
+        if (this.colorScheme === 'datasets') {
+            const maxDatasets = Math.max(...sortedRegions.map(r => r.dataset_count));
+            const minDatasets = Math.min(...sortedRegions.map(r => r.dataset_count));
+            colorMax = maxDatasets;
+            colorMin = minDatasets;
+            colorLogMax = Math.log(Math.max(maxDatasets, 1));
+            colorLogMin = Math.log(Math.max(minDatasets, 1));
+        } else {
+            colorMax = maxBytes;
+            colorMin = minBytes;
+            colorLogMax = logMax;
+            colorLogMin = logMin;
+        }
+
         // Create markers in ascending volume order (low to high)
         // Higher volume markers will be on top
         sortedRegions.forEach(region => {
-            this.createRegionMarker(region, logMin, logMax);
+            this.createRegionMarker(region, logMin, logMax, colorLogMin, colorLogMax);
         });
 
         // Update legend with actual data ranges
         this.updateLegend(sortedRegions);
     },
 
-    createRegionMarker(region, logMin, logMax) {
+    createRegionMarker(region, logMin, logMax, colorLogMin, colorLogMax) {
         // Calculate bubble size based on download volume and zoom level
         const logBytes = Math.log(region.total_bytes);
         const normalizedSize = (logBytes - logMin) / (logMax - logMin);
@@ -97,13 +114,22 @@ const MapVisualization = {
         const maxRadius = Math.max(8, 15 * zoomFactor);
         const radius = minRadius + (normalizedSize * (maxRadius - minRadius));
 
-        // Create color scale based on download volume
-        const color = this.getVolumeColor(normalizedSize);
+        // Calculate color based on selected scheme
+        let colorValue;
+        if (this.colorScheme === 'datasets') {
+            const logDatasets = Math.log(Math.max(region.dataset_count, 1));
+            colorValue = (logDatasets - colorLogMin) / (colorLogMax - colorLogMin);
+        } else {
+            colorValue = normalizedSize; // Use same as size for volume
+        }
+
+        // Create color scale
+        const color = this.getColor(colorValue, this.colorScheme);
         
         // Determine opacity based on dataset diversity
         const opacity = Math.min(0.3 + (region.dataset_count / 20), 0.8);
 
-        // Create circle marker with volume-based color
+        // Create circle marker
         const marker = L.circleMarker([region.latitude, region.longitude], {
             radius: radius,
             fillColor: color.fill,
@@ -153,12 +179,22 @@ const MapVisualization = {
         const displayName = region.name !== region.code ? 
             `${region.name} (${region.code})` : region.code;
         
+        // Try to get chart data total first, fallback to backend total
+        let totalBytes = region.total_bytes;
+        let totalBytesFormatted = region.total_bytes_formatted;
+        
+        const chartTotal = Utils.calculateChartTotal(region.code);
+        if (chartTotal !== null) {
+            totalBytes = chartTotal;
+            totalBytesFormatted = Utils.formatBytes(chartTotal);
+        }
+        
         return `
             <div class="popup-content">
                 <div class="popup-title">${displayName}</div>
                 <div class="popup-stats">
                     <div><strong>Country:</strong> ${region.country}</div>
-                    <div><strong>Total Downloads:</strong> ${region.total_bytes_formatted}</div>
+                    <div><strong>Total Downloads:</strong> ${totalBytesFormatted}</div>
                     <div><strong>Datasets:</strong> ${Utils.formatNumber(region.dataset_count)}</div>
                 </div>
             </div>
@@ -254,7 +290,9 @@ const MapVisualization = {
         if (!regions || regions.length === 0) {
             // Reset legend when no data
             legendItems.forEach((item, index) => {
-                const labels = ['Low Volume', 'Medium Volume', 'Medium-High Volume', 'High Volume'];
+                const labels = this.colorScheme === 'datasets' ? 
+                    ['Low Count', 'Medium Count', 'Medium-High Count', 'High Count'] :
+                    ['Low Volume', 'Medium Volume', 'Medium-High Volume', 'High Volume'];
                 if (item && labels[index]) {
                     item.textContent = labels[index];
                 }
@@ -262,26 +300,51 @@ const MapVisualization = {
             return;
         }
 
-        const maxBytes = Math.max(...regions.map(r => r.total_bytes));
-        const minBytes = Math.min(...regions.filter(r => r.total_bytes > 0).map(r => r.total_bytes));
-        
-        // Calculate logarithmic ranges to match the marker sizing
-        const logMax = Math.log(maxBytes);
-        const logMin = Math.log(minBytes);
-        const logRange = logMax - logMin;
-        
-        // Define thresholds that match the color categories (0.2, 0.4, 0.6, 0.8)
-        const threshold1 = Math.exp(logMin + logRange * 0.2);  // Low volume threshold
-        const threshold2 = Math.exp(logMin + logRange * 0.4);  // Medium volume threshold  
-        const threshold3 = Math.exp(logMin + logRange * 0.6);  // Medium-high volume threshold
-        const threshold4 = Math.exp(logMin + logRange * 0.8);  // High volume threshold
-        
-        // Update legend text with actual data ranges
-        if (legendItems.length >= 4) {
-            legendItems[0].textContent = `< ${Utils.formatBytes(threshold1)}`;
-            legendItems[1].textContent = `${Utils.formatBytes(threshold1)} - ${Utils.formatBytes(threshold2)}`;
-            legendItems[2].textContent = `${Utils.formatBytes(threshold2)} - ${Utils.formatBytes(threshold3)}`;
-            legendItems[3].textContent = `> ${Utils.formatBytes(threshold3)}`;
+        if (this.colorScheme === 'datasets') {
+            // Legend for dataset count
+            const maxDatasets = Math.max(...regions.map(r => r.dataset_count));
+            const minDatasets = Math.min(...regions.map(r => r.dataset_count));
+            
+            // Calculate logarithmic ranges for dataset count
+            const logMax = Math.log(Math.max(maxDatasets, 1));
+            const logMin = Math.log(Math.max(minDatasets, 1));
+            const logRange = logMax - logMin;
+            
+            // Define thresholds for dataset count that align with color calculation
+            const threshold1 = Math.exp(logMin + logRange * 0.2);
+            const threshold2 = Math.exp(logMin + logRange * 0.4);
+            const threshold3 = Math.exp(logMin + logRange * 0.6);
+            const threshold4 = Math.exp(logMin + logRange * 0.8);
+            
+            // Update legend text with dataset count ranges - ensure ranges cover all data
+            if (legendItems.length >= 4) {
+                legendItems[0].textContent = `${minDatasets} - ${Math.round(threshold1)} datasets`;
+                legendItems[1].textContent = `${Math.round(threshold1) + 1} - ${Math.round(threshold2)} datasets`;
+                legendItems[2].textContent = `${Math.round(threshold2) + 1} - ${Math.round(threshold3)} datasets`;
+                legendItems[3].textContent = `${Math.round(threshold3) + 1} - ${maxDatasets} datasets`;
+            }
+        } else {
+            // Legend for data volume
+            const maxBytes = Math.max(...regions.map(r => r.total_bytes));
+            const minBytes = Math.min(...regions.filter(r => r.total_bytes > 0).map(r => r.total_bytes));
+            
+            // Calculate logarithmic ranges to match the marker sizing
+            const logMax = Math.log(maxBytes);
+            const logMin = Math.log(minBytes);
+            const logRange = logMax - logMin;
+            
+            // Define thresholds that match the color categories (0.2, 0.4, 0.6, 0.8)
+            const threshold1 = Math.exp(logMin + logRange * 0.2);  // Low volume threshold
+            const threshold2 = Math.exp(logMin + logRange * 0.4);  // Medium volume threshold  
+            const threshold3 = Math.exp(logMin + logRange * 0.6);  // Medium-high volume threshold
+            
+            // Update legend text with actual data ranges - ensure complete coverage
+            if (legendItems.length >= 4) {
+                legendItems[0].textContent = `${Utils.formatBytes(minBytes)} - ${Utils.formatBytes(threshold1)}`;
+                legendItems[1].textContent = `${Utils.formatBytes(threshold1)} - ${Utils.formatBytes(threshold2)}`;
+                legendItems[2].textContent = `${Utils.formatBytes(threshold2)} - ${Utils.formatBytes(threshold3)}`;
+                legendItems[3].textContent = `${Utils.formatBytes(threshold3)} - ${Utils.formatBytes(maxBytes)}`;
+            }
         }
     },
 
@@ -319,42 +382,100 @@ const MapVisualization = {
         });
     },
 
-    // Method to get color based on download volume
-    getVolumeColor(normalizedSize) {
-        // Create a color gradient from low (blue) to high (red) volume
-        // Using a smooth gradient through green/yellow for mid-range values
+    // Method to get color based on the selected scheme
+    getColor(normalizedValue, scheme) {
+        // Ensure normalizedValue is between 0 and 1
+        const clampedValue = Math.max(0, Math.min(1, normalizedValue));
         
-        if (normalizedSize <= 0.2) {
-            // Low volume: Blue tones
-            return {
-                fill: '#4fc3f7',     // Light blue
-                stroke: '#0288d1'     // Darker blue
-            };
-        } else if (normalizedSize <= 0.4) {
-            // Low-medium volume: Teal/Cyan
-            return {
-                fill: '#26c6da',     // Cyan
-                stroke: '#0097a7'     // Dark cyan
-            };
-        } else if (normalizedSize <= 0.6) {
-            // Medium volume: Green
-            return {
-                fill: '#66bb6a',     // Light green
-                stroke: '#388e3c'     // Dark green
-            };
-        } else if (normalizedSize <= 0.8) {
-            // Medium-high volume: Yellow/Orange
-            return {
-                fill: '#ffca28',     // Yellow
-                stroke: '#f57f17'     // Dark yellow
-            };
+        if (scheme === 'datasets') {
+            // Green to magenta gradient for dataset count (completely different from volume)
+            if (clampedValue <= 0.2) {
+                return {
+                    fill: '#4caf50',     // Green
+                    stroke: '#388e3c'     // Dark green
+                };
+            } else if (clampedValue <= 0.4) {
+                return {
+                    fill: '#8bc34a',     // Light green
+                    stroke: '#689f38'     // Darker light green
+                };
+            } else if (clampedValue <= 0.6) {
+                return {
+                    fill: '#cddc39',     // Lime
+                    stroke: '#9e9d24'     // Dark lime
+                };
+            } else if (clampedValue <= 0.8) {
+                return {
+                    fill: '#e91e63',     // Pink
+                    stroke: '#ad1457'     // Dark pink
+                };
+            } else {
+                return {
+                    fill: '#9c27b0',     // Purple/Magenta
+                    stroke: '#7b1fa2'     // Dark purple
+                };
+            }
         } else {
-            // High volume: Red/Orange
-            return {
-                fill: '#ff7043',     // Orange-red
-                stroke: '#d84315'     // Dark red
-            };
+            // Volume scheme: Original blue to red gradient through green/yellow
+            if (clampedValue <= 0.2) {
+                return {
+                    fill: '#4fc3f7',     // Light blue
+                    stroke: '#0288d1'     // Darker blue
+                };
+            } else if (clampedValue <= 0.4) {
+                return {
+                    fill: '#26c6da',     // Cyan
+                    stroke: '#0097a7'     // Dark cyan
+                };
+            } else if (clampedValue <= 0.6) {
+                return {
+                    fill: '#66bb6a',     // Light green
+                    stroke: '#388e3c'     // Dark green
+                };
+            } else if (clampedValue <= 0.8) {
+                return {
+                    fill: '#ffca28',     // Yellow
+                    stroke: '#f57f17'     // Dark yellow
+                };
+            } else {
+                return {
+                    fill: '#ff7043',     // Orange-red
+                    stroke: '#d84315'     // Dark red
+                };
+            }
         }
+    },
+
+    // Method to change color scheme
+    setColorScheme(scheme) {
+        this.colorScheme = scheme;
+        // Update legend circles CSS classes
+        this.updateLegendCircles(scheme);
+        // Refresh the visualization with current regions
+        this.updateRegions(AppState.regions);
+    },
+
+    // Update legend circle CSS classes based on color scheme
+    updateLegendCircles(scheme) {
+        const legendCircles = document.querySelectorAll('.legend-circle');
+        const suffixes = ['low', 'medium', 'medium-high', 'high'];
+        const schemeSuffix = scheme === 'datasets' ? 'datasets' : 'volume';
+        
+        legendCircles.forEach((circle, index) => {
+            // Remove all existing scheme classes
+            circle.classList.remove('low-volume', 'medium-volume', 'medium-high-volume', 'high-volume');
+            circle.classList.remove('low-datasets', 'medium-datasets', 'medium-high-datasets', 'high-datasets');
+            
+            // Add the appropriate class for the current scheme
+            if (suffixes[index]) {
+                circle.classList.add(`${suffixes[index]}-${schemeSuffix}`);
+            }
+        });
+    },
+
+    // Method to get color based on download volume (for backward compatibility)
+    getVolumeColor(normalizedSize) {
+        return this.getColor(normalizedSize, 'volume');
     }
 };
 

@@ -7,7 +7,9 @@ const AppState = {
     selectedRegion: null,
     map: null,
     charts: {},
-    isCumulative: false
+    isCumulative: false,
+    colorScheme: 'volume',
+    chartData: {} // Store chart data for access by other components
 };
 
 // API base URL
@@ -57,6 +59,47 @@ const Utils = {
         console.error('Error:', message);
         // You could implement a toast notification here
         alert('Error: ' + message);
+    },
+
+    // Calculate total bytes from chart data for a specific region
+    calculateChartTotal: (regionCode) => {
+        if (!AppState.chartData || !AppState.chartData.time_series) {
+            return null;
+        }
+
+        // If this is global data, we can't calculate region-specific totals
+        if (!AppState.chartData.region_code) {
+            return null;
+        }
+
+        // If this is region data and matches the requested region
+        if (AppState.chartData.region_code === regionCode) {
+            const timeSeries = AppState.chartData.time_series;
+            const datasets = AppState.chartData.top_datasets || [];
+            
+            // Add "OTHER" to datasets if it exists in the data
+            const allDatasets = [...datasets];
+            if (timeSeries.some(d => d.OTHER)) {
+                allDatasets.push('OTHER');
+            }
+
+            // Calculate total as sum of all dataset totals from chart data
+            let total = 0;
+            if (AppState.chartData.dataset_totals) {
+                // Use the dataset_totals from the API response (this is the actual chart data)
+                total = Object.values(AppState.chartData.dataset_totals).reduce((sum, value) => sum + value, 0);
+            } else {
+                // Fallback: sum the latest values from time series
+                if (timeSeries.length > 0) {
+                    const latestDay = timeSeries[timeSeries.length - 1];
+                    total = allDatasets.reduce((sum, dataset) => sum + (latestDay[dataset] || 0), 0);
+                }
+            }
+
+            return total;
+        }
+
+        return null;
     }
 };
 
@@ -297,11 +340,22 @@ const EventHandlers = {
         }, 300));
     },
 
+    setupColorSchemeSelector() {
+        const select = document.getElementById('color-scheme');
+        select.addEventListener('change', (e) => {
+            AppState.colorScheme = e.target.value;
+            MapVisualization.setColorScheme(e.target.value);
+        });
+    },
+
     setupResetButton() {
         document.getElementById('reset-view').addEventListener('click', () => {
             AppState.selectedRegion = null;
             AppState.selectedDataset = 'ALL';
             document.getElementById('dataset-filter').value = 'ALL';
+            document.getElementById('color-scheme').value = 'volume';
+            AppState.colorScheme = 'volume';
+            MapVisualization.setColorScheme('volume');
             App.updateVisualization();
         });
     },
@@ -329,6 +383,7 @@ const App = {
             
             // Initialize event handlers
             EventHandlers.setupDatasetFilter();
+            EventHandlers.setupColorSchemeSelector();
             EventHandlers.setupResetButton();
             EventHandlers.setupShowGlobalButton();
             EventHandlers.setupCumulativeToggle();

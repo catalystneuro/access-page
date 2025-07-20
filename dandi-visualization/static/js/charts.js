@@ -54,6 +54,9 @@ const ChartsVisualization = {
             return;
         }
 
+        // Store chart data in AppState for access by other components
+        AppState.chartData = data;
+
         const title = data.region_code ? `Downloads in ${data.region_code}` : 'Global Downloads';
         this.renderStackedBarChart('#main-chart', data, title);
         

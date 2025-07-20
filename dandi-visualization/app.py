@@ -41,7 +41,7 @@ def get_regions():
     conn = get_db_connection()
     
     if dataset_filter and dataset_filter != 'ALL':
-        # Filter by specific dataset
+        # Filter by specific dataset - calculate from downloads_by_region
         query = '''
             SELECT 
                 r.code,
@@ -50,21 +50,37 @@ def get_regions():
                 r.latitude,
                 r.longitude,
                 COALESCE(dr.bytes_sent, 0) as total_bytes,
-                1 as dataset_count
+                CASE WHEN dr.bytes_sent > 0 THEN 1 ELSE 0 END as dataset_count
             FROM regions r
             LEFT JOIN downloads_by_region dr ON r.code = dr.region_code AND dr.dataset_id = ?
             WHERE r.latitude IS NOT NULL AND r.longitude IS NOT NULL
-            AND (dr.bytes_sent > 0 OR dr.bytes_sent IS NULL)
+            AND dr.bytes_sent > 0
         '''
         cursor = conn.execute(query, (dataset_filter,))
     else:
-        # All datasets
+        # All datasets - calculate on-the-fly from downloads_by_region table
         query = '''
             SELECT 
-                code, name, country, latitude, longitude, total_bytes, dataset_count
-            FROM regional_summary 
-            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-            AND total_bytes > 0
+                r.code,
+                r.name,
+                r.country,
+                r.latitude,
+                r.longitude,
+                COALESCE(region_stats.total_bytes, 0) as total_bytes,
+                COALESCE(region_stats.dataset_count, 0) as dataset_count
+            FROM regions r
+            LEFT JOIN (
+                SELECT 
+                    dr.region_code,
+                    SUM(dr.bytes_sent) as total_bytes,
+                    COUNT(DISTINCT dr.dataset_id) as dataset_count
+                FROM downloads_by_region dr
+                JOIN datasets d ON dr.dataset_id = d.id
+                WHERE d.id != 'ARCHIVE_TOTAL' AND dr.bytes_sent > 0
+                GROUP BY dr.region_code
+            ) region_stats ON r.code = region_stats.region_code
+            WHERE r.latitude IS NOT NULL AND r.longitude IS NOT NULL
+            AND region_stats.total_bytes > 0
         '''
         cursor = conn.execute(query)
     

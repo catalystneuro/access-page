@@ -241,6 +241,27 @@ select:focus {
     border-color: #d84315;
 }
 
+/* Dataset count-based colors */
+.legend-circle.low-datasets {
+    background: #4caf50;
+    border-color: #388e3c;
+}
+
+.legend-circle.medium-datasets {
+    background: #cddc39;
+    border-color: #9e9d24;
+}
+
+.legend-circle.medium-high-datasets {
+    background: #e91e63;
+    border-color: #ad1457;
+}
+
+.legend-circle.high-datasets {
+    background: #9c27b0;
+    border-color: #7b1fa2;
+}
+
 /* Charts Panel */
 .charts-panel {
     display: flex;
