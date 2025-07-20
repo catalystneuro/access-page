@@ -57,6 +57,7 @@ const MapVisualization = {
         this.selectedMarker = null;
 
         if (!regions || regions.length === 0) {
+            this.updateLegend([]);
             return;
         }
 
@@ -77,6 +78,9 @@ const MapVisualization = {
         sortedRegions.forEach(region => {
             this.createRegionMarker(region, logMin, logMax);
         });
+
+        // Update legend with actual data ranges
+        this.updateLegend(sortedRegions);
     },
 
     createRegionMarker(region, logMin, logMax) {
@@ -245,17 +249,39 @@ const MapVisualization = {
 
     // Add legend update method
     updateLegend(regions) {
-        if (!regions || regions.length === 0) return;
+        const legendItems = document.querySelectorAll('.legend-item span');
+        
+        if (!regions || regions.length === 0) {
+            // Reset legend when no data
+            legendItems.forEach((item, index) => {
+                const labels = ['Low Volume', 'Medium Volume', 'Medium-High Volume', 'High Volume'];
+                if (item && labels[index]) {
+                    item.textContent = labels[index];
+                }
+            });
+            return;
+        }
 
         const maxBytes = Math.max(...regions.map(r => r.total_bytes));
         const minBytes = Math.min(...regions.filter(r => r.total_bytes > 0).map(r => r.total_bytes));
         
-        // Update legend text (you could make this more dynamic)
-        const legendItems = document.querySelectorAll('.legend-item span');
-        if (legendItems.length >= 3) {
-            legendItems[0].textContent = `< ${Utils.formatBytes(maxBytes * 0.1)}`;
-            legendItems[1].textContent = `${Utils.formatBytes(maxBytes * 0.1)} - ${Utils.formatBytes(maxBytes * 0.5)}`;
-            legendItems[2].textContent = `> ${Utils.formatBytes(maxBytes * 0.5)}`;
+        // Calculate logarithmic ranges to match the marker sizing
+        const logMax = Math.log(maxBytes);
+        const logMin = Math.log(minBytes);
+        const logRange = logMax - logMin;
+        
+        // Define thresholds that match the color categories (0.2, 0.4, 0.6, 0.8)
+        const threshold1 = Math.exp(logMin + logRange * 0.2);  // Low volume threshold
+        const threshold2 = Math.exp(logMin + logRange * 0.4);  // Medium volume threshold  
+        const threshold3 = Math.exp(logMin + logRange * 0.6);  // Medium-high volume threshold
+        const threshold4 = Math.exp(logMin + logRange * 0.8);  // High volume threshold
+        
+        // Update legend text with actual data ranges
+        if (legendItems.length >= 4) {
+            legendItems[0].textContent = `< ${Utils.formatBytes(threshold1)}`;
+            legendItems[1].textContent = `${Utils.formatBytes(threshold1)} - ${Utils.formatBytes(threshold2)}`;
+            legendItems[2].textContent = `${Utils.formatBytes(threshold2)} - ${Utils.formatBytes(threshold3)}`;
+            legendItems[3].textContent = `> ${Utils.formatBytes(threshold3)}`;
         }
     },
 

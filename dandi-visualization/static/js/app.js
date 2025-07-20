@@ -259,13 +259,14 @@ const UI = {
 
         return dandisets.map(dandiset => {
             const downloadInfo = dandiset.total_bytes_formatted ? 
-                ` (${dandiset.total_bytes_formatted})` : '';
+                ` (${dandiset.total_bytes_formatted} downloaded)` : '';
             
             return `
                 <div class="dandiset-list-item">
-                    <a href="${dandiset.landing_url}" target="_blank" class="dandiset-title-link">
+                    <a href="#" class="dandiset-title-link" onclick="App.selectDataset('${dandiset.id}'); return false;">
                         ${dandiset.id}: ${dandiset.name}
                     </a>${downloadInfo}
+                    <a href="${dandiset.landing_url}" target="_blank" class="dandiset-external-link">DANDI</a>
                 </div>
             `;
         }).join('');
@@ -463,6 +464,27 @@ const App = {
         } catch (error) {
             Utils.showError('Failed to refresh chart');
             console.error('Chart refresh error:', error);
+        }
+    },
+
+    async selectDataset(datasetId) {
+        try {
+            // Update the dropdown
+            document.getElementById('dataset-filter').value = datasetId;
+            
+            // Update app state
+            AppState.selectedDataset = datasetId;
+            
+            // Reset region selection when dataset changes
+            AppState.selectedRegion = null;
+            AppState.selectedRegionName = null;
+            
+            // Update visualization
+            await this.updateVisualization();
+            
+        } catch (error) {
+            Utils.showError('Failed to select dataset');
+            console.error('Dataset selection error:', error);
         }
     }
 };

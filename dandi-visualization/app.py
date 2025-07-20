@@ -131,9 +131,10 @@ def get_region_downloads(region_code):
     sorted_datasets = sorted(dataset_totals.items(), key=lambda x: x[1], reverse=True)
     top_datasets = [ds[0] for ds in sorted_datasets[:7]]
     
-    # Get global daily downloads for these datasets
-    if top_datasets:
-        placeholders = ','.join('?' * len(top_datasets))
+    # Get global daily downloads for ALL datasets that have activity in this region
+    if dataset_proportions:
+        all_region_datasets = list(dataset_proportions.keys())
+        placeholders = ','.join('?' * len(all_region_datasets))
         daily_query = f'''
             SELECT 
                 dd.dataset_id,
@@ -144,7 +145,7 @@ def get_region_downloads(region_code):
             ORDER BY dd.date, dd.dataset_id
         '''
         
-        cursor = conn.execute(daily_query, top_datasets)
+        cursor = conn.execute(daily_query, all_region_datasets)
         daily_results = cursor.fetchall()
         
         # Apply region proportions to global daily data

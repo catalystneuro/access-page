@@ -140,6 +140,7 @@ select:focus {
     display: flex;
     flex-direction: column;
     min-height: 600px;
+    position: relative;
 }
 
 .map-container {
@@ -147,6 +148,7 @@ select:focus {
     border-radius: 4px;
     overflow: hidden;
     flex: 1;
+    position: relative;
 }
 
 .map-legend {
@@ -157,6 +159,36 @@ select:focus {
     padding: 10px;
     background: #f8f9fa;
     border-radius: 4px;
+}
+
+/* Legend overlay for wider screens - positioned inside map panel */
+@media (min-width: 1024px) {
+    .map-legend {
+        position: absolute;
+        top: 50px;
+        right: 20px;
+        z-index: 1000;
+        margin-top: 0;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(5px);
+        border: 1px solid rgba(222, 226, 230, 0.6);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        padding: 12px;
+        border-radius: 6px;
+        max-width: 180px;
+        min-width: 160px;
+    }
+    
+    .map-legend .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: #495057;
+        white-space: nowrap;
+    }
 }
 
 .legend-item {
@@ -381,8 +413,10 @@ select:focus {
     }
     
     .stats-bar {
-        flex-direction: column;
-        gap: 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 15px;
     }
     
     .stat-item {
@@ -583,6 +617,25 @@ select::-webkit-scrollbar-thumb:hover {
 .dandiset-list-item .dandiset-title-link {
     margin-bottom: 0;
     display: inline;
+}
+
+.dandiset-external-link {
+    display: inline-block;
+    background: #28a745;
+    color: white;
+    text-decoration: none;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: 8px;
+    transition: background-color 0.3s;
+}
+
+.dandiset-external-link:hover {
+    background: #218838;
+    text-decoration: none;
+    color: white;
 }
 
 .dandiset-downloads {
