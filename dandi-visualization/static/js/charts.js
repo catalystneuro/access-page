@@ -56,6 +56,12 @@ const ChartsVisualization = {
 
         const title = data.region_code ? `Downloads in ${data.region_code}` : 'Global Downloads';
         this.renderStackedBarChart('#main-chart', data, title);
+        
+        // Update featured dandisets based on chart data
+        if (window.UI && typeof window.UI.updateFeaturedDandisetsFromChartData === 'function') {
+            const regionName = data.region_code || data.region_name || AppState.selectedRegionName;
+            window.UI.updateFeaturedDandisetsFromChartData(data, regionName);
+        }
     },
 
     clearRegionChart() {

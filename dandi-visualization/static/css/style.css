@@ -213,7 +213,7 @@ select:focus {
 .charts-panel {
     display: flex;
     flex-direction: column;
-    min-height: 300px;
+    min-height: 700px;
 }
 
 .chart-header {
@@ -263,7 +263,7 @@ select:focus {
 }
 
 .chart {
-    height: 450px;
+    height: 900px;
     border: 1px solid #e1e8ed;
     border-radius: 4px;
     position: relative;
@@ -418,7 +418,7 @@ select:focus {
     }
     
     .chart {
-        height: 200px;
+        height: 350px;
     }
     
     .map-legend {
@@ -466,4 +466,197 @@ select::-webkit-scrollbar-thumb {
 
 select::-webkit-scrollbar-thumb:hover {
     background: #5a67d8;
+}
+
+/* Featured Dandisets Styles */
+.chart-content-container {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+}
+
+.chart-container {
+    flex: 2;
+    min-width: 0;
+}
+
+.featured-dandisets-panel {
+    flex: 1;
+    min-width: 300px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #e9ecef;
+}
+
+.featured-dandisets-panel h4 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 8px;
+}
+
+.featured-dandisets-container {
+    max-height: 900px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #667eea #e9ecef;
+}
+
+.featured-dandisets-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.featured-dandisets-container::-webkit-scrollbar-track {
+    background: #e9ecef;
+    border-radius: 3px;
+}
+
+.featured-dandisets-container::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 3px;
+}
+
+.dandiset-item {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dandiset-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: #667eea;
+}
+
+.dandiset-title-link {
+    display: block;
+    font-weight: 600;
+    color: #667eea;
+    font-size: 0.9rem;
+    text-decoration: none;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    transition: color 0.3s ease;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.dandiset-title-link:hover {
+    color: #5a67d8;
+    text-decoration: underline;
+}
+
+.dandisets-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dandisets-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: #667eea;
+}
+
+.dandiset-list-item {
+    margin-bottom: 8px;
+    line-height: 1.4;
+    font-size: 0.9rem;
+}
+
+.dandiset-list-item:last-child {
+    margin-bottom: 0;
+}
+
+.dandiset-list-item .dandiset-title-link {
+    margin-bottom: 0;
+    display: inline;
+}
+
+.dandiset-downloads {
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 500;
+    margin-bottom: 10px;
+    padding: 3px 8px;
+    background: #e9ecef;
+    border-radius: 12px;
+    display: inline-block;
+}
+
+.dandiset-link {
+    display: inline-block;
+    background: #667eea;
+    color: white;
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.dandiset-link:hover {
+    background: #5a67d8;
+    text-decoration: none;
+    color: white;
+}
+
+.loading-message {
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+    padding: 20px;
+}
+
+.error-message {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 12px;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+/* Responsive adjustments for featured dandisets */
+@media (max-width: 1024px) {
+    .chart-content-container {
+        flex-direction: column;
+    }
+    
+    .featured-dandisets-panel {
+        min-width: auto;
+        margin-top: 20px;
+    }
+    
+    .featured-dandisets-container {
+        max-height: 300px;
+    }
+}
+
+@media (max-width: 768px) {
+    .featured-dandisets-panel {
+        padding: 15px;
+    }
+    
+    .dandiset-item {
+        padding: 12px;
+    }
+    
+    .dandiset-name {
+        -webkit-line-clamp: 2;
+    }
 }

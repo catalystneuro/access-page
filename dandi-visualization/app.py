@@ -4,6 +4,7 @@ import sqlite3
 import json
 from datetime import datetime, timedelta
 import pandas as pd
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -319,6 +320,166 @@ def get_stats():
         'unique_countries': int(archive_stats['unique_countries']),
         'active_regions': active_regions
     })
+
+# Global cache for DANDI API data to avoid repeated calls
+_dandi_cache = None
+_cache_timestamp = None
+
+def get_dandi_metadata():
+    """Get DANDI metadata with caching"""
+    global _dandi_cache, _cache_timestamp
+    
+    # Cache for 1 hour
+    cache_duration = 3600
+    current_time = datetime.now().timestamp()
+    
+    if _dandi_cache is None or (_cache_timestamp is None) or (current_time - _cache_timestamp) > cache_duration:
+        try:
+            api_url = "https://api.dandiarchive.org/api/dandisets/"
+            params = {
+                'page_size': 1000,
+                'ordering': '-created'
+            }
+            
+            response = requests.get(api_url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            api_data = response.json()
+            
+            # Create a mapping of dandiset IDs from the API
+            api_dandisets = {}
+            for dandiset in api_data.get('results', []):
+                dandiset_id = dandiset.get('identifier', '')
+                if dandiset_id:
+                    # Get the most recent version
+                    most_recent_version = dandiset.get('most_recent_published_version', {})
+                    if not most_recent_version:
+                        most_recent_version = dandiset.get('draft_version', {})
+                    
+                    version = most_recent_version.get('version', 'draft')
+                    
+                    api_dandisets[dandiset_id] = {
+                        'name': most_recent_version.get('name', f'Dataset {dandiset_id}'),
+                        'version': version,
+                        'landing_url': f"https://dandiarchive.org/dandiset/{dandiset_id}/{version}"
+                    }
+            
+            _dandi_cache = api_dandisets
+            _cache_timestamp = current_time
+            
+        except Exception as e:
+            print(f"Failed to fetch DANDI metadata: {e}")
+            if _dandi_cache is None:
+                _dandi_cache = {}
+    
+    return _dandi_cache
+
+@app.route('/api/featured-dandisets')
+def get_featured_dandisets():
+    """Get featured dandisets - the top datasets shown in the global bar plot"""
+    try:
+        # Get the top datasets by download volume from our database
+        conn = get_db_connection()
+        
+        query = '''
+            SELECT 
+                id, total_bytes
+            FROM datasets 
+            WHERE id != 'ARCHIVE_TOTAL'
+            ORDER BY total_bytes DESC
+            LIMIT 7
+        '''
+        
+        cursor = conn.execute(query)
+        top_datasets = cursor.fetchall()
+        conn.close()
+        
+        # Get DANDI metadata
+        dandi_metadata = get_dandi_metadata()
+        
+        # Create featured dandisets list
+        featured_dandisets = []
+        for dataset_row in top_datasets:
+            dataset_id = dataset_row['id']
+            
+            if dataset_id in dandi_metadata:
+                metadata = dandi_metadata[dataset_id]
+                featured_dandisets.append({
+                    'id': dataset_id,
+                    'name': metadata['name'],
+                    'landing_url': metadata['landing_url'],
+                    'version': metadata['version'],
+                    'total_bytes': int(dataset_row['total_bytes']),
+                    'total_bytes_formatted': format_bytes(dataset_row['total_bytes'])
+                })
+            else:
+                featured_dandisets.append({
+                    'id': dataset_id,
+                    'name': f'Dataset {dataset_id}',
+                    'landing_url': f'https://dandiarchive.org/dandiset/{dataset_id}/draft',
+                    'version': 'draft',
+                    'total_bytes': int(dataset_row['total_bytes']),
+                    'total_bytes_formatted': format_bytes(dataset_row['total_bytes'])
+                })
+        
+        return jsonify({
+            'featured_dandisets': featured_dandisets,
+            'count': len(featured_dandisets)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch featured dandisets: {str(e)}'
+        }), 500
+
+@app.route('/api/dandisets/metadata', methods=['POST'])
+def get_dandisets_metadata():
+    """Get metadata for specific dataset IDs"""
+    try:
+        data = request.get_json()
+        dataset_ids = data.get('dataset_ids', [])
+        dataset_totals = data.get('dataset_totals', {})
+        
+        if not dataset_ids:
+            return jsonify({'error': 'No dataset IDs provided'}), 400
+        
+        # Get DANDI metadata
+        dandi_metadata = get_dandi_metadata()
+        
+        # Create response with metadata for requested datasets
+        dandisets = []
+        for dataset_id in dataset_ids:
+            total_bytes = dataset_totals.get(dataset_id, 0)
+            
+            if dataset_id in dandi_metadata:
+                metadata = dandi_metadata[dataset_id]
+                dandisets.append({
+                    'id': dataset_id,
+                    'name': metadata['name'],
+                    'landing_url': metadata['landing_url'],
+                    'version': metadata['version'],
+                    'total_bytes': total_bytes,
+                    'total_bytes_formatted': format_bytes(total_bytes)
+                })
+            else:
+                dandisets.append({
+                    'id': dataset_id,
+                    'name': f'Dataset {dataset_id}',
+                    'landing_url': f'https://dandiarchive.org/dandiset/{dataset_id}/draft',
+                    'version': 'draft',
+                    'total_bytes': total_bytes,
+                    'total_bytes_formatted': format_bytes(total_bytes)
+                })
+        
+        return jsonify({
+            'dandisets': dandisets,
+            'count': len(dandisets)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch dandisets metadata: {str(e)}'
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

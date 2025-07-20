@@ -119,6 +119,17 @@ const API = {
             Utils.showError('Failed to load region download data');
             throw error;
         }
+    },
+
+    async fetchFeaturedDandisets() {
+        try {
+            const response = await fetch(`${API_BASE}/featured-dandisets`);
+            if (!response.ok) throw new Error('Failed to fetch featured dandisets');
+            return await response.json();
+        } catch (error) {
+            Utils.showError('Failed to load featured dandisets');
+            throw error;
+        }
     }
 };
 
@@ -159,6 +170,119 @@ const UI = {
             title.textContent = 'Global Downloads Over Time';
             globalBtn.style.display = 'none';
         }
+    },
+
+    displayFeaturedDandisets(dandisetsData) {
+        const container = document.getElementById('featured-dandisets-container');
+        
+        if (dandisetsData.error) {
+            container.innerHTML = `
+                <div class="error-message">
+                    ${dandisetsData.error}
+                </div>
+                ${dandisetsData.featured_dandisets ? 
+                    this.createDandisetsListHTML(dandisetsData.featured_dandisets) : ''
+                }
+            `;
+        } else if (dandisetsData.featured_dandisets && dandisetsData.featured_dandisets.length > 0) {
+            container.innerHTML = this.createDandisetsListHTML(dandisetsData.featured_dandisets);
+        } else {
+            container.innerHTML = '<div class="loading-message">No featured dandisets available</div>';
+        }
+    },
+
+    async updateFeaturedDandisetsFromChartData(chartData, regionName = null) {
+        const container = document.getElementById('featured-dandisets-container');
+        
+        if (!chartData.top_datasets || !chartData.dataset_totals) {
+            container.innerHTML = '<div class="loading-message">No featured dandisets available</div>';
+            return;
+        }
+
+        // Update the panel title based on context
+        const panelTitle = document.querySelector('.featured-dandisets-panel h4');
+        if (regionName) {
+            panelTitle.textContent = `Top Datasets in ${regionName}`;
+        } else {
+            panelTitle.textContent = 'Featured Dandisets';
+        }
+
+        try {
+            // Call the API to get metadata for the specific datasets
+            const response = await fetch(`${API_BASE}/dandisets/metadata`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    dataset_ids: chartData.top_datasets,
+                    dataset_totals: chartData.dataset_totals
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Display the dandisets
+            container.innerHTML = this.createDandisetsListHTML(data.dandisets);
+
+        } catch (error) {
+            console.error('Failed to update featured dandisets:', error);
+            // Fallback: show datasets without metadata
+            const fallbackDandisets = chartData.top_datasets.map(datasetId => {
+                const bytes = chartData.dataset_totals[datasetId] || 0;
+                return {
+                    id: datasetId,
+                    name: `Dataset ${datasetId}`,
+                    landing_url: `https://dandiarchive.org/dandiset/${datasetId}/draft`,
+                    version: 'draft',
+                    total_bytes: bytes,
+                    total_bytes_formatted: Utils.formatBytes(bytes)
+                };
+            });
+
+            container.innerHTML = this.createDandisetsListHTML(fallbackDandisets);
+        }
+    },
+
+    createDandisetsListHTML(dandisets) {
+        if (!dandisets || dandisets.length === 0) {
+            return '<div class="loading-message">No dandisets available</div>';
+        }
+
+        return dandisets.map(dandiset => {
+            const downloadInfo = dandiset.total_bytes_formatted ? 
+                ` (${dandiset.total_bytes_formatted})` : '';
+            
+            return `
+                <div class="dandiset-list-item">
+                    <a href="${dandiset.landing_url}" target="_blank" class="dandiset-title-link">
+                        ${dandiset.id}: ${dandiset.name}
+                    </a>${downloadInfo}
+                </div>
+            `;
+        }).join('');
+    },
+
+    createDandisetHTML(dandiset) {
+        const downloadInfo = dandiset.total_bytes_formatted ? 
+            `<div class="dandiset-downloads">Downloads: ${dandiset.total_bytes_formatted}</div>` : '';
+        
+        return `
+            <div class="dandiset-item">
+                <a href="${dandiset.landing_url}" target="_blank" class="dandiset-title-link">
+                    ${dandiset.id}: ${dandiset.name}
+                </a>
+                ${downloadInfo}
+            </div>
+        `;
     }
 };
 
@@ -247,6 +371,21 @@ const App = {
         // Load and display initial charts
         const globalData = await API.fetchGlobalDownloads();
         ChartsVisualization.renderMainChart(globalData);
+        
+        // Note: Featured dandisets are now updated automatically by the chart rendering
+        // No need to load them separately as they will be based on chart data
+    },
+
+    async loadFeaturedDandisets() {
+        try {
+            const dandisetsData = await API.fetchFeaturedDandisets();
+            UI.displayFeaturedDandisets(dandisetsData);
+        } catch (error) {
+            console.error('Failed to load featured dandisets:', error);
+            // Display error in the container
+            const container = document.getElementById('featured-dandisets-container');
+            container.innerHTML = '<div class="error-message">Failed to load featured dandisets</div>';
+        }
     },
 
     async updateVisualization() {
@@ -278,6 +417,7 @@ const App = {
     async selectRegion(regionCode, regionName) {
         try {
             AppState.selectedRegion = regionCode;
+            AppState.selectedRegionName = regionName;
             UI.updateChartTitle(regionCode, regionName);
             
             // Load and display region-specific data
@@ -293,6 +433,7 @@ const App = {
     async showGlobalData() {
         try {
             AppState.selectedRegion = null;
+            AppState.selectedRegionName = null;
             UI.updateChartTitle(null);
             
             // Reset map selection
@@ -335,4 +476,5 @@ document.addEventListener('DOMContentLoaded', () => {
 window.App = App;
 window.AppState = AppState;
 window.Utils = Utils;
+window.UI = UI;
 window.DATASET_COLORS = DATASET_COLORS;
