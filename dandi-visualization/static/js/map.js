@@ -189,13 +189,18 @@ const MapVisualization = {
             totalBytesFormatted = Utils.formatBytes(chartTotal);
         }
         
+        // Only show datasets count when "All Datasets" is selected
+        const showDatasets = AppState.selectedDataset === 'ALL';
+        const datasetsLine = showDatasets ? 
+            `<div><strong>Datasets:</strong> ${Utils.formatNumber(region.dataset_count)}</div>` : '';
+        
         return `
             <div class="popup-content">
                 <div class="popup-title">${displayName}</div>
                 <div class="popup-stats">
                     <div><strong>Country:</strong> ${region.country}</div>
                     <div><strong>Total Downloads:</strong> ${totalBytesFormatted}</div>
-                    <div><strong>Datasets:</strong> ${Utils.formatNumber(region.dataset_count)}</div>
+                    ${datasetsLine}
                 </div>
             </div>
         `;

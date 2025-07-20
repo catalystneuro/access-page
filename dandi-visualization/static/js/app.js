@@ -336,6 +336,19 @@ const EventHandlers = {
         const select = document.getElementById('dataset-filter');
         select.addEventListener('change', Utils.debounce(async (e) => {
             AppState.selectedDataset = e.target.value;
+            const colorSchemeSelect = document.getElementById('color-scheme');
+            
+            // Automatically set color scheme to "Data Volume" and disable dropdown when filtering by a specific dataset
+            if (e.target.value !== 'ALL') {
+                colorSchemeSelect.value = 'volume';
+                colorSchemeSelect.disabled = true;
+                AppState.colorScheme = 'volume';
+                MapVisualization.setColorScheme('volume');
+            } else {
+                // Re-enable the dropdown when "All Datasets" is selected
+                colorSchemeSelect.disabled = false;
+            }
+            
             await App.updateVisualization();
         }, 300));
     },
@@ -354,6 +367,7 @@ const EventHandlers = {
             AppState.selectedDataset = 'ALL';
             document.getElementById('dataset-filter').value = 'ALL';
             document.getElementById('color-scheme').value = 'volume';
+            document.getElementById('color-scheme').disabled = false; // Re-enable the dropdown
             AppState.colorScheme = 'volume';
             MapVisualization.setColorScheme('volume');
             App.updateVisualization();
@@ -529,6 +543,19 @@ const App = {
             
             // Update app state
             AppState.selectedDataset = datasetId;
+            
+            const colorSchemeSelect = document.getElementById('color-scheme');
+            
+            // Automatically set color scheme to "Data Volume" and disable dropdown when selecting a specific dataset
+            if (datasetId !== 'ALL') {
+                colorSchemeSelect.value = 'volume';
+                colorSchemeSelect.disabled = true;
+                AppState.colorScheme = 'volume';
+                MapVisualization.setColorScheme('volume');
+            } else {
+                // Re-enable the dropdown when "All Datasets" is selected
+                colorSchemeSelect.disabled = false;
+            }
             
             // Reset region selection when dataset changes
             AppState.selectedRegion = null;
