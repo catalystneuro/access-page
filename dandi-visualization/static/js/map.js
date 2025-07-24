@@ -120,11 +120,12 @@ const MapVisualization = {
             const logDatasets = Math.log(Math.max(region.dataset_count, 1));
             colorValue = (logDatasets - colorLogMin) / (colorLogMax - colorLogMin);
         } else {
-            colorValue = normalizedSize; // Use same as size for volume
+            // For volume scheme, use actual bytes value
+            colorValue = region.total_bytes;
         }
 
         // Create color scale
-        const color = this.getColor(colorValue, this.colorScheme);
+        const color = this.getColor(colorValue, this.colorScheme, region);
         
         // Determine opacity based on dataset diversity
         const opacity = Math.min(0.3 + (region.dataset_count / 20), 0.8);
@@ -315,41 +316,31 @@ const MapVisualization = {
             const logMin = Math.log(Math.max(minDatasets, 1));
             const logRange = logMax - logMin;
             
-            // Define thresholds for dataset count that align with color calculation
-            const threshold1 = Math.exp(logMin + logRange * 0.2);
-            const threshold2 = Math.exp(logMin + logRange * 0.4);
-            const threshold3 = Math.exp(logMin + logRange * 0.6);
-            const threshold4 = Math.exp(logMin + logRange * 0.8);
+            // Calculate the actual thresholds that correspond to normalized values 0.2, 0.4, 0.6, 0.8
+            // These are the exact values used in the getColor method for color assignment
+            const actualThreshold1 = Math.exp(logMin + logRange * 0.2);
+            const actualThreshold2 = Math.exp(logMin + logRange * 0.4);
+            const actualThreshold3 = Math.exp(logMin + logRange * 0.6);
+            const actualThreshold4 = Math.exp(logMin + logRange * 0.8);
             
-            // Update legend text with dataset count ranges - ensure ranges cover all data
+            // Update legend text with dataset count ranges that exactly match color boundaries
             if (legendItems.length >= 4) {
-                legendItems[0].textContent = `${minDatasets} - ${Math.round(threshold1)} datasets`;
-                legendItems[1].textContent = `${Math.round(threshold1) + 1} - ${Math.round(threshold2)} datasets`;
-                legendItems[2].textContent = `${Math.round(threshold2) + 1} - ${Math.round(threshold3)} datasets`;
-                legendItems[3].textContent = `${Math.round(threshold3) + 1} - ${maxDatasets} datasets`;
+                legendItems[0].textContent = `${minDatasets} - ${Math.ceil(actualThreshold1)} datasets`;
+                legendItems[1].textContent = `${Math.ceil(actualThreshold1) + 1} - ${Math.ceil(actualThreshold2)} datasets`;
+                legendItems[2].textContent = `${Math.ceil(actualThreshold2) + 1} - ${Math.ceil(actualThreshold3)} datasets`;
+                legendItems[3].textContent = `${Math.ceil(actualThreshold3) + 1} - ${maxDatasets} datasets`;
             }
         } else {
-            // Legend for data volume
-            const maxBytes = Math.max(...regions.map(r => r.total_bytes));
-            const minBytes = Math.min(...regions.filter(r => r.total_bytes > 0).map(r => r.total_bytes));
+            // Legend for data volume - use centralized category system for perfect consistency
+            const categories = ['low', 'medium', 'high', 'very-high'];
             
-            // Calculate logarithmic ranges to match the marker sizing
-            const logMax = Math.log(maxBytes);
-            const logMin = Math.log(minBytes);
-            const logRange = logMax - logMin;
-            
-            // Define thresholds that match the color categories (0.2, 0.4, 0.6, 0.8)
-            const threshold1 = Math.exp(logMin + logRange * 0.2);  // Low volume threshold
-            const threshold2 = Math.exp(logMin + logRange * 0.4);  // Medium volume threshold  
-            const threshold3 = Math.exp(logMin + logRange * 0.6);  // Medium-high volume threshold
-            
-            // Update legend text with actual data ranges - ensure complete coverage
-            if (legendItems.length >= 4) {
-                legendItems[0].textContent = `${Utils.formatBytes(minBytes)} - ${Utils.formatBytes(threshold1)}`;
-                legendItems[1].textContent = `${Utils.formatBytes(threshold1)} - ${Utils.formatBytes(threshold2)}`;
-                legendItems[2].textContent = `${Utils.formatBytes(threshold2)} - ${Utils.formatBytes(threshold3)}`;
-                legendItems[3].textContent = `${Utils.formatBytes(threshold3)} - ${Utils.formatBytes(maxBytes)}`;
-            }
+            // Update legend text using the centralized category system
+            legendItems.forEach((item, index) => {
+                if (categories[index]) {
+                    const categoryInfo = this.getCategoryInfo(categories[index]);
+                    item.textContent = categoryInfo.range;
+                }
+            });
         }
     },
 
@@ -387,12 +378,85 @@ const MapVisualization = {
         });
     },
 
-    // Method to get color based on the selected scheme
-    getColor(normalizedValue, scheme) {
-        // Ensure normalizedValue is between 0 and 1
-        const clampedValue = Math.max(0, Math.min(1, normalizedValue));
+    // Static thresholds for volume-based coloring (in bytes)
+    getVolumeThresholds() {
+        return {
+            threshold1: 1048576,        // 1 MB
+            threshold2: 104857600,      // 100 MB
+            threshold3: 1099511627776   // 1 TB
+        };
+    },
+
+    // Centralized function to determine volume category
+    getVolumeCategory(totalBytes) {
+        const thresholds = this.getVolumeThresholds();
         
+        if (totalBytes <= thresholds.threshold1) {
+            return 'low';               // ≤ 1 MB
+        } else if (totalBytes <= thresholds.threshold2) {
+            return 'medium';            // 1 MB - 100 MB
+        } else if (totalBytes <= thresholds.threshold3) {
+            return 'high';              // 100 MB - 1 TB
+        } else {
+            return 'very-high';         // > 1 TB
+        }
+    },
+
+    // Get color based on category
+    getCategoryColor(category) {
+        const colorMap = {
+            'low': {
+                fill: '#26c6da',     // Cyan
+                stroke: '#0097a7'     // Dark cyan
+            },
+            'medium': {
+                fill: '#66bb6a',     // Light green
+                stroke: '#388e3c'     // Dark green
+            },
+            'high': {
+                fill: '#ffca28',     // Yellow
+                stroke: '#f57f17'     // Dark yellow
+            },
+            'very-high': {
+                fill: '#ff7043',     // Orange-red
+                stroke: '#d84315'     // Dark red
+            }
+        };
+        
+        return colorMap[category] || colorMap['medium']; // Default fallback
+    },
+
+    // Get category display name and range
+    getCategoryInfo(category) {
+        const thresholds = this.getVolumeThresholds();
+        
+        const categoryInfo = {
+            'low': {
+                name: 'Low Volume', 
+                range: `≤ ${Utils.formatBytes(thresholds.threshold1)}`
+            },
+            'medium': {
+                name: 'Medium Volume',
+                range: `${Utils.formatBytes(thresholds.threshold1)} - ${Utils.formatBytes(thresholds.threshold2)}`
+            },
+            'high': {
+                name: 'High Volume',
+                range: `${Utils.formatBytes(thresholds.threshold2)} - ${Utils.formatBytes(thresholds.threshold3)}`
+            },
+            'very-high': {
+                name: 'Very High Volume',
+                range: `> ${Utils.formatBytes(thresholds.threshold3)}`
+            }
+        };
+        
+        return categoryInfo[category] || categoryInfo['medium']; // Default fallback
+    },
+
+    // Method to get color based on the selected scheme
+    getColor(value, scheme, region = null) {
         if (scheme === 'datasets') {
+            // For datasets, use normalized value (0-1) as before
+            const clampedValue = Math.max(0, Math.min(1, value));
             // Green to magenta gradient for dataset count (completely different from volume)
             if (clampedValue <= 0.2) {
                 return {
@@ -421,33 +485,10 @@ const MapVisualization = {
                 };
             }
         } else {
-            // Volume scheme: Original blue to red gradient through green/yellow
-            if (clampedValue <= 0.2) {
-                return {
-                    fill: '#4fc3f7',     // Light blue
-                    stroke: '#0288d1'     // Darker blue
-                };
-            } else if (clampedValue <= 0.4) {
-                return {
-                    fill: '#26c6da',     // Cyan
-                    stroke: '#0097a7'     // Dark cyan
-                };
-            } else if (clampedValue <= 0.6) {
-                return {
-                    fill: '#66bb6a',     // Light green
-                    stroke: '#388e3c'     // Dark green
-                };
-            } else if (clampedValue <= 0.8) {
-                return {
-                    fill: '#ffca28',     // Yellow
-                    stroke: '#f57f17'     // Dark yellow
-                };
-            } else {
-                return {
-                    fill: '#ff7043',     // Orange-red
-                    stroke: '#d84315'     // Dark red
-                };
-            }
+            // Volume scheme: Use centralized category system to eliminate confusion
+            const totalBytes = value; // value is now the actual bytes for volume scheme
+            const category = this.getVolumeCategory(totalBytes);
+            return this.getCategoryColor(category);
         }
     },
 

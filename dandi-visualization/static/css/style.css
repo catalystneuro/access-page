@@ -220,10 +220,15 @@ select:focus {
     height: 24px;
 }
 
-/* Volume-based colors matching the map gradient */
-.legend-circle.low-volume {
+/* Volume-based colors matching the map gradient - 5 categories */
+.legend-circle.very-low-volume {
     background: #4fc3f7;
     border-color: #0288d1;
+}
+
+.legend-circle.low-volume {
+    background: #26c6da;
+    border-color: #0097a7;
 }
 
 .legend-circle.medium-volume {
@@ -231,14 +236,20 @@ select:focus {
     border-color: #388e3c;
 }
 
-.legend-circle.medium-high-volume {
+.legend-circle.high-volume {
     background: #ffca28;
     border-color: #f57f17;
 }
 
-.legend-circle.high-volume {
+.legend-circle.very-high-volume {
     background: #ff7043;
     border-color: #d84315;
+}
+
+/* Legacy medium-high-volume for backwards compatibility */
+.legend-circle.medium-high-volume {
+    background: #ffca28;
+    border-color: #f57f17;
 }
 
 /* Dataset count-based colors */
