@@ -110,15 +110,35 @@ class DownloadVideoGenerator:
                 print(f"Processed {i + 1}/{len(all_weeks)} weeks")
         
         print(f"Created {len(snapshots)} weekly snapshots")
+        
+        # Calculate global min/max for consistent bubble sizing across all frames
+        print("Calculating global scaling parameters...")
+        all_values = []
+        for snapshot in snapshots.values():
+            if len(snapshot) > 0:
+                all_values.extend(snapshot['total_bytes_sent'].values)
+        
+        if all_values:
+            self.global_min_bytes = min(all_values)
+            self.global_max_bytes = max(all_values)
+            self.global_log_min = np.log(self.global_min_bytes)
+            self.global_log_max = np.log(self.global_max_bytes)
+            print(f"Global range: {self.format_bytes(self.global_min_bytes)} to {self.format_bytes(self.global_max_bytes)}")
+        else:
+            self.global_min_bytes = 1
+            self.global_max_bytes = 1
+            self.global_log_min = 0
+            self.global_log_max = 0
+            
         return snapshots
     
     def create_frame(self, month_data, month_period, frame_num, total_frames):
         """Create a single frame of the video."""
         fig = plt.figure(figsize=(16, 10), facecolor='white')
         
-        # Create map with Robinson projection (good for world maps)
-        ax = plt.axes(projection=ccrs.Robinson())
-        ax.set_global()
+        # Create map with flat PlateCarree projection, excluding Antarctica and cutting Pacific west of Hawaii
+        ax = plt.axes(projection=ccrs.PlateCarree())
+        ax.set_extent([-170, 180, -60, 85], crs=ccrs.PlateCarree())
         
         # Add map features
         ax.add_feature(cfeature.LAND, color='#f5f5f5', alpha=0.8)
@@ -130,23 +150,17 @@ class DownloadVideoGenerator:
             # No data for this month, show empty map
             pass
         else:
-            # Calculate size scaling
-            max_bytes = month_data['total_bytes_sent'].max()
-            min_bytes = month_data['total_bytes_sent'].min()
-            
-            if max_bytes > min_bytes:
-                log_max = np.log(max_bytes)
-                log_min = np.log(min_bytes)
-                
+            # Use global scaling for consistent bubble sizes across all frames
+            if self.global_max_bytes > self.global_min_bytes:
                 # Create bubble markers
                 for _, region in month_data.iterrows():
-                    # Calculate bubble size (logarithmic scaling)
+                    # Calculate bubble size using global scaling (logarithmic)
                     log_bytes = np.log(region['total_bytes_sent'])
-                    normalized_size = (log_bytes - log_min) / (log_max - log_min)
+                    normalized_size = (log_bytes - self.global_log_min) / (self.global_log_max - self.global_log_min)
                     
-                    # Size range from 20 to 400 square points
-                    min_size = 20
-                    max_size = 400
+                    # Smaller size range from 10 to 200 square points (reduced from 20-400)
+                    min_size = 10
+                    max_size = 200
                     bubble_size = min_size + (normalized_size * (max_size - min_size))
                     
                     # Get color based on volume category
