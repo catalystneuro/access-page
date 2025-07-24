@@ -129,22 +129,54 @@ class DownloadVideoGenerator:
             self.global_max_bytes = 1
             self.global_log_min = 0
             self.global_log_max = 0
+        
+        # Calculate cumulative downloads timeline for bar chart
+        print("Calculating cumulative downloads timeline...")
+        all_weeks = sorted(snapshots.keys())
+        self.cumulative_timeline = []
+        
+        for week in all_weeks:
+            snapshot = snapshots[week]
+            if len(snapshot) > 0:
+                total_downloads = snapshot['total_bytes_sent'].sum()
+            else:
+                total_downloads = 0
+            self.cumulative_timeline.append(total_downloads)
+        
+        self.timeline_weeks = [week.to_timestamp() for week in all_weeks]
+        self.max_cumulative = max(self.cumulative_timeline) if self.cumulative_timeline else 0
+        print(f"Timeline: {len(self.cumulative_timeline)} weeks, max cumulative: {self.format_bytes(self.max_cumulative)}")
             
         return snapshots
     
     def create_frame(self, month_data, month_period, frame_num, total_frames):
         """Create a single frame of the video."""
-        fig = plt.figure(figsize=(16, 10), facecolor='white')
+        fig = plt.figure(figsize=(16, 12), facecolor='white')
         
-        # Create map with flat PlateCarree projection, excluding Antarctica and cutting Pacific west of Hawaii
-        ax = plt.axes(projection=ccrs.PlateCarree())
+        # Create map subplot first and let cartopy resize it
+        ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
         ax.set_extent([-170, 180, -60, 85], crs=ccrs.PlateCarree())
         
+        # After cartopy adjusts the map, get its actual position
+        fig.canvas.draw()  # Force drawing to get actual positions
+        map_bbox = ax.get_position()
+        
+        # Calculate position for bar chart - place it just below the map
+        chart_height = 0.15  # Height for the chart
+        chart_bottom = map_bbox.y0 - chart_height - 0.02 - .1  # Small gap below map
+        
+        # Create bar chart subplot with manual positioning
+        chart_ax = fig.add_axes([map_bbox.x0, chart_bottom, map_bbox.width, chart_height])
+        self.add_cumulative_chart_subplot(chart_ax, frame_num, total_frames)
+        
         # Add map features
-        ax.add_feature(cfeature.LAND, color='#f5f5f5', alpha=0.8)
+        ax.add_feature(cfeature.LAND, color="#dde9de", alpha=0.8)
         ax.add_feature(cfeature.OCEAN, color='#e3f2fd', alpha=0.8)
         ax.add_feature(cfeature.COASTLINE, color='#666666', linewidth=0.5)
         ax.add_feature(cfeature.BORDERS, color='#999999', linewidth=0.3)
+        ax.add_feature(cfeature.LAKES, color='#b3e5fc', alpha=0.8)
+        ax.add_feature(cfeature.RIVERS, color='#90caf9', linewidth=0.5)
+        ax.add_feature(cfeature.STATES, linestyle='--', linewidth=0.5, alpha=0.8, edgecolor='#cccccc')
         
         if len(month_data) == 0:
             # No data for this month, show empty map
@@ -152,21 +184,27 @@ class DownloadVideoGenerator:
         else:
             # Use global scaling for consistent bubble sizes across all frames
             if self.global_max_bytes > self.global_min_bytes:
+                # Sort regions by total_bytes_sent to ensure proper z-ordering (smallest first, largest last)
+                sorted_data = month_data.sort_values('total_bytes_sent', ascending=True)
+                
                 # Create bubble markers
-                for _, region in month_data.iterrows():
+                for _, region in sorted_data.iterrows():
                     # Calculate bubble size using global scaling (logarithmic)
                     log_bytes = np.log(region['total_bytes_sent'])
                     normalized_size = (log_bytes - self.global_log_min) / (self.global_log_max - self.global_log_min)
                     
                     # Smaller size range from 10 to 200 square points (reduced from 20-400)
-                    min_size = 10
-                    max_size = 200
+                    min_size = 5
+                    max_size = 125
                     bubble_size = min_size + (normalized_size * (max_size - min_size))
                     
                     # Get color based on volume category
                     category = self.get_volume_category(region['total_bytes_sent'])
                     color = self.color_map[category]['fill']
                     edge_color = self.color_map[category]['stroke']
+                    
+                    # Calculate z-order based on volume (higher volume = higher z-order)
+                    volume_zorder = 5 + int(normalized_size * 10)  # Range from 5 to 15
                     
                     # Plot bubble
                     ax.scatter(
@@ -177,7 +215,7 @@ class DownloadVideoGenerator:
                         linewidths=1,
                         alpha=0.7,
                         transform=ccrs.PlateCarree(),
-                        zorder=5
+                        zorder=volume_zorder
                     )
         
         # Add title with current month
@@ -186,39 +224,34 @@ class DownloadVideoGenerator:
             f'DANDI Archive Downloads Progression\n{month_str}',
             fontsize=20,
             fontweight='bold',
-            y=0.95
+            y=0.8
         )
         
         # Add statistics text
         if len(month_data) > 0:
             total_downloads = month_data['total_bytes_sent'].sum()
             total_regions = len(month_data)
-            total_datasets = month_data['dandiset_id'].sum()
             
             stats_text = (
                 f"Total Downloads: {self.format_bytes(total_downloads)}\n"
-                f"Active Regions: {total_regions}\n"
-                f"Datasets: {total_datasets}"
+                f"Active Regions: {total_regions}"
             )
         else:
             stats_text = "No downloads recorded yet"
         
-        # Add stats box
+        # Add stats box in bottom left, above the legend
         props = dict(boxstyle='round', facecolor='white', alpha=0.8)
         ax.text(
-            0.02, 0.98, stats_text,
+            0.02, 0.25, stats_text,
             transform=ax.transAxes,
             fontsize=12,
-            verticalalignment='top',
+            verticalalignment='bottom',
             bbox=props,
             zorder=10
         )
         
         # Add legend
         self.add_legend(ax)
-        
-        # Add progress bar
-        self.add_progress_bar(ax, frame_num, total_frames)
         
         plt.tight_layout()
         
@@ -249,38 +282,61 @@ class DownloadVideoGenerator:
         legend.get_frame().set_facecolor('white')
         legend.get_frame().set_alpha(0.8)
     
-    def add_progress_bar(self, ax, current_frame, total_frames):
-        """Add progress bar to show video progression."""
-        progress = current_frame / total_frames
+    def add_cumulative_chart_subplot(self, chart_ax, current_frame, total_frames):
+        """Add cumulative downloads bar chart as a separate subplot."""
+        from matplotlib.dates import DateFormatter
+        import matplotlib.dates as mdates
         
-        # Progress bar background
-        bar_bg = patches.Rectangle(
-            (0.7, 0.02), 0.28, 0.02,
-            transform=ax.transAxes,
-            facecolor='lightgray',
-            edgecolor='black',
-            linewidth=1,
-            zorder=10
-        )
-        ax.add_patch(bar_bg)
-        
-        # Progress bar fill
-        bar_fill = patches.Rectangle(
-            (0.7, 0.02), 0.28 * progress, 0.02,
-            transform=ax.transAxes,
-            facecolor='#2196F3',
-            zorder=11
-        )
-        ax.add_patch(bar_fill)
-        
-        # Progress text
-        ax.text(
-            0.84, 0.06, f'{current_frame}/{total_frames}',
-            transform=ax.transAxes,
-            fontsize=10,
-            ha='center',
-            zorder=12
-        )
+        # Get data up to current frame
+        current_index = current_frame - 1
+        if current_index >= 0 and current_index < len(self.cumulative_timeline):
+            x_data = self.timeline_weeks[:current_index + 1]
+            y_data = self.cumulative_timeline[:current_index + 1]
+            
+            if len(x_data) > 0:
+                # Create bar chart
+                chart_ax.bar(x_data, y_data, color='#2196F3', alpha=0.7, width=7)  # width in days
+                
+                # Set chart limits and formatting
+                chart_ax.set_xlim(self.timeline_weeks[0], self.timeline_weeks[-1])
+                chart_ax.set_ylim(0, self.max_cumulative * 1.1)
+                
+                # Format y-axis with byte formatting
+                max_val = self.max_cumulative
+                if max_val > 1e12:  # TB
+                    chart_ax.set_ylabel('Downloads (TB)', fontsize=12)
+                    y_ticks = chart_ax.get_yticks()
+                    chart_ax.set_yticklabels([f'{tick/1e12:.0f}' for tick in y_ticks], fontsize=10)
+                elif max_val > 1e9:  # GB
+                    chart_ax.set_ylabel('Downloads (GB)', fontsize=12)
+                    y_ticks = chart_ax.get_yticks()
+                    chart_ax.set_yticklabels([f'{tick/1e9:.0f}' for tick in y_ticks], fontsize=10)
+                else:  # MB
+                    chart_ax.set_ylabel('Downloads (MB)', fontsize=12)
+                    y_ticks = chart_ax.get_yticks()
+                    chart_ax.set_yticklabels([f'{tick/1e6:.0f}' for tick in y_ticks], fontsize=10)
+                
+                # Format x-axis
+                chart_ax.xaxis.set_major_formatter(DateFormatter('%Y'))
+                chart_ax.xaxis.set_major_locator(mdates.YearLocator())
+                chart_ax.tick_params(axis='x', labelsize=10, rotation=45)
+                chart_ax.tick_params(axis='y', labelsize=10)
+                
+                
+                # Style the chart
+                chart_ax.grid(True, alpha=0.3)
+                chart_ax.set_facecolor('white')
+                
+                # Add border
+                for spine in chart_ax.spines.values():
+                    spine.set_edgecolor('black')
+                    spine.set_linewidth(1)
+        else:
+            # No data yet, show empty chart
+            chart_ax.set_xlim(self.timeline_weeks[0], self.timeline_weeks[-1])
+            chart_ax.set_ylim(0, self.max_cumulative * 1.1)
+            chart_ax.set_ylabel('Downloads', fontsize=12)
+            chart_ax.grid(True, alpha=0.3)
     
     def generate_frames(self, snapshots):
         """Generate all video frames."""
