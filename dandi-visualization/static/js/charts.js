@@ -87,7 +87,8 @@ const ChartsVisualization = {
         }
         
         // Set up dimensions - adjust right margin based on whether legend will be shown
-        const showLegend = AppState.selectedDataset === 'ALL' && allDatasets.length > 1;
+        const showLegend = (AppState.selectedDataset === 'ALL' && allDatasets.length > 1) || 
+                          (data.view_type === 'regions' && allDatasets.length > 1);
         const margin = { 
             top: 20, 
             right: showLegend ? 120 : 20, 
@@ -240,8 +241,8 @@ const ChartsVisualization = {
             .style('text-anchor', 'middle')
             .text('Date');
 
-        // Add legend only when showing multiple datasets (i.e., when "All Datasets" is selected)
-        if (AppState.selectedDataset === 'ALL' && filteredDatasets.length > 1) {
+        // Add legend when showing multiple datasets OR when showing regions for a specific dataset
+        if (showLegend) {
             this.addLegend(svg, filteredDatasets, colorScale, rect.width - margin.right + 10, margin.top);
         }
         
@@ -341,8 +342,23 @@ const ChartsVisualization = {
 
     formatDatasetName(dataset) {
         if (dataset === 'OTHER') {
-            return 'Other Datasets';
+            // Check if we're in region view mode
+            if (AppState.chartData && AppState.chartData.view_type === 'regions') {
+                return 'Other Regions';
+            } else {
+                return 'Other Datasets';
+            }
         }
+        
+        // Check if this is a region (contains '/')
+        if (dataset.includes('/')) {
+            // Format region name (e.g., "US/California" -> "California, US")
+            const parts = dataset.split('/');
+            if (parts.length === 2) {
+                return `${parts[1]}, ${parts[0]}`;
+            }
+        }
+        
         return dataset;
     },
 

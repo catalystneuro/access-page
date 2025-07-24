@@ -218,42 +218,85 @@ def get_global_downloads():
         end_date_obj = pd.to_datetime(end_date).date()
         filtered_df = filtered_df[filtered_df['download_date'] <= end_date_obj]
     
-    # Aggregate by date and dataset
-    daily_data = filtered_df.groupby(['download_date', 'dandiset_id'])['total_bytes_sent'].sum().reset_index()
-    
-    # Get dataset totals
-    dataset_totals = filtered_df.groupby('dandiset_id')['total_bytes_sent'].sum().sort_values(ascending=False)
-    
-    # Get top 7 datasets
-    top_datasets = [str(dataset_id) for dataset_id in dataset_totals.head(7).index]
-    dataset_totals_dict = {str(k): int(v) for k, v in dataset_totals.head(7).items()}
-    
-    # Pivot to get datasets as columns
-    time_series_pivot = daily_data.pivot(index='download_date', columns='dandiset_id', values='total_bytes_sent').fillna(0)
-    
-    # Prepare time series output
-    time_series = []
-    for date, row in time_series_pivot.iterrows():
-        day_data = {'date': str(date)}
-        other_bytes = 0
+    # When a specific dataset is selected, show regions instead of datasets
+    if dataset_filter and dataset_filter != 'ALL':
+        # Aggregate by date and region for the selected dataset
+        daily_data = filtered_df.groupby(['download_date', 'region'])['total_bytes_sent'].sum().reset_index()
         
-        for dataset_id, bytes_sent in row.items():
-            dataset_str = str(int(dataset_id))
-            if dataset_str in top_datasets:
-                day_data[dataset_str] = int(float(bytes_sent))
-            else:
-                other_bytes += int(float(bytes_sent))
+        # Get region totals for this dataset
+        region_totals = filtered_df.groupby('region')['total_bytes_sent'].sum().sort_values(ascending=False)
         
-        if other_bytes > 0:
-            day_data['OTHER'] = other_bytes
+        # Get top 7 regions
+        top_regions = [str(region) for region in region_totals.head(7).index]
+        region_totals_dict = {str(k): int(v) for k, v in region_totals.head(7).items()}
         
-        time_series.append(day_data)
+        # Pivot to get regions as columns
+        time_series_pivot = daily_data.pivot(index='download_date', columns='region', values='total_bytes_sent').fillna(0)
+        
+        # Prepare time series output
+        time_series = []
+        for date, row in time_series_pivot.iterrows():
+            day_data = {'date': str(date)}
+            other_bytes = 0
+            
+            for region, bytes_sent in row.items():
+                region_str = str(region)
+                if region_str in top_regions:
+                    day_data[region_str] = int(float(bytes_sent))
+                else:
+                    other_bytes += int(float(bytes_sent))
+            
+            if other_bytes > 0:
+                day_data['OTHER'] = other_bytes
+            
+            time_series.append(day_data)
+        
+        return jsonify({
+            'time_series': time_series,
+            'top_datasets': top_regions,  # Using 'top_datasets' for consistency, but contains regions
+            'dataset_totals': region_totals_dict,  # Using 'dataset_totals' for consistency, but contains region totals
+            'view_type': 'regions'  # Add indicator for frontend
+        })
     
-    return jsonify({
-        'time_series': time_series,
-        'top_datasets': top_datasets,
-        'dataset_totals': dataset_totals_dict
-    })
+    else:
+        # Default behavior: show datasets across all regions
+        # Aggregate by date and dataset
+        daily_data = filtered_df.groupby(['download_date', 'dandiset_id'])['total_bytes_sent'].sum().reset_index()
+        
+        # Get dataset totals
+        dataset_totals = filtered_df.groupby('dandiset_id')['total_bytes_sent'].sum().sort_values(ascending=False)
+        
+        # Get top 7 datasets
+        top_datasets = [str(dataset_id) for dataset_id in dataset_totals.head(7).index]
+        dataset_totals_dict = {str(k): int(v) for k, v in dataset_totals.head(7).items()}
+        
+        # Pivot to get datasets as columns
+        time_series_pivot = daily_data.pivot(index='download_date', columns='dandiset_id', values='total_bytes_sent').fillna(0)
+        
+        # Prepare time series output
+        time_series = []
+        for date, row in time_series_pivot.iterrows():
+            day_data = {'date': str(date)}
+            other_bytes = 0
+            
+            for dataset_id, bytes_sent in row.items():
+                dataset_str = str(int(dataset_id))
+                if dataset_str in top_datasets:
+                    day_data[dataset_str] = int(float(bytes_sent))
+                else:
+                    other_bytes += int(float(bytes_sent))
+            
+            if other_bytes > 0:
+                day_data['OTHER'] = other_bytes
+            
+            time_series.append(day_data)
+        
+        return jsonify({
+            'time_series': time_series,
+            'top_datasets': top_datasets,
+            'dataset_totals': dataset_totals_dict,
+            'view_type': 'datasets'  # Add indicator for frontend
+        })
 
 @app.route('/api/datasets')
 def get_datasets():
