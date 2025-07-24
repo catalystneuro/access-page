@@ -59,12 +59,6 @@ const ChartsVisualization = {
 
         const title = data.region_code ? `Downloads in ${data.region_code}` : 'Global Downloads';
         this.renderStackedBarChart('#main-chart', data, title);
-        
-        // Update featured dandisets based on chart data
-        if (window.UI && typeof window.UI.updateFeaturedDandisetsFromChartData === 'function') {
-            const regionName = data.region_code || data.region_name || AppState.selectedRegionName;
-            window.UI.updateFeaturedDandisetsFromChartData(data, regionName);
-        }
     },
 
     clearRegionChart() {
@@ -82,8 +76,24 @@ const ChartsVisualization = {
         const containerNode = container.node();
         const rect = containerNode.getBoundingClientRect();
         
-        // Set up dimensions
-        const margin = { top: 20, right: 120, bottom: 60, left: 80 };
+        // Process data first to determine if legend is needed
+        let timeSeries = [...data.time_series]; // Create a copy
+        const datasets = data.top_datasets || [];
+        
+        // Add "OTHER" to datasets if it exists in the data
+        const allDatasets = [...datasets];
+        if (timeSeries.some(d => d.OTHER)) {
+            allDatasets.push('OTHER');
+        }
+        
+        // Set up dimensions - adjust right margin based on whether legend will be shown
+        const showLegend = AppState.selectedDataset === 'ALL' && allDatasets.length > 1;
+        const margin = { 
+            top: 20, 
+            right: showLegend ? 120 : 20, 
+            bottom: 60, 
+            left: 80 
+        };
         const width = rect.width - margin.left - margin.right;
         const height = rect.height - margin.top - margin.bottom;
 
@@ -97,16 +107,6 @@ const ChartsVisualization = {
             .append('g')
             .attr('transform', `translate(${margin.left},${margin.top})`);
 
-        // Process data
-        let timeSeries = [...data.time_series]; // Create a copy
-        const datasets = data.top_datasets || [];
-        
-        // Add "OTHER" to datasets if it exists in the data
-        const allDatasets = [...datasets];
-        if (timeSeries.some(d => d.OTHER)) {
-            allDatasets.push('OTHER');
-        }
-
         // Parse dates and prepare data
         const parseDate = d3.timeParse('%Y-%m-%d');
         timeSeries.forEach(d => {
@@ -118,9 +118,28 @@ const ChartsVisualization = {
         timeSeries = timeSeries.filter(d => d.date !== null);
         timeSeries.sort((a, b) => a.date - b.date);
 
-        // Apply cumulative transformation if enabled
+        // Filter datasets to only include those that have data in the time series
+        // This ensures that when date filters are applied, only active datasets appear
+        const activeDatasetsInTimeRange = new Set();
+        timeSeries.forEach(d => {
+            allDatasets.forEach(dataset => {
+                if (d[dataset] && d[dataset] > 0) {
+                    activeDatasetsInTimeRange.add(dataset);
+                }
+            });
+        });
+
+        // Update allDatasets to only include active ones
+        const filteredDatasets = allDatasets.filter(dataset => activeDatasetsInTimeRange.has(dataset));
+        
+        // Recalculate totals with filtered datasets
+        timeSeries.forEach(d => {
+            d.total = filteredDatasets.reduce((sum, dataset) => sum + (d[dataset] || 0), 0);
+        });
+
+        // Apply cumulative transformation if enabled (use filtered datasets)
         if (AppState.isCumulative) {
-            timeSeries = this.transformToCumulative(timeSeries, allDatasets);
+            timeSeries = this.transformToCumulative(timeSeries, filteredDatasets);
         }
 
         // Set up scales - use band scale for better bar positioning
@@ -133,14 +152,14 @@ const ChartsVisualization = {
             .domain([0, d3.max(timeSeries, d => d.total)])
             .range([height, 0]);
 
-        // Color scale for datasets
+        // Color scale for datasets (use filtered datasets)
         const colorScale = d3.scaleOrdinal()
-            .domain(allDatasets)
+            .domain(filteredDatasets)
             .range(DATASET_COLORS);
 
-        // Create stack generator
+        // Create stack generator (use filtered datasets)
         const stack = d3.stack()
-            .keys(allDatasets)
+            .keys(filteredDatasets)
             .value((d, key) => d[key] || 0);
 
         const stackedData = stack(timeSeries);
@@ -221,8 +240,33 @@ const ChartsVisualization = {
             .style('text-anchor', 'middle')
             .text('Date');
 
-        // Add legend
-        this.addLegend(svg, allDatasets, colorScale, rect.width - margin.right + 10, margin.top);
+        // Add legend only when showing multiple datasets (i.e., when "All Datasets" is selected)
+        if (AppState.selectedDataset === 'ALL' && filteredDatasets.length > 1) {
+            this.addLegend(svg, filteredDatasets, colorScale, rect.width - margin.right + 10, margin.top);
+        }
+        
+        // Update featured dandisets with filtered data
+        if (window.UI && typeof window.UI.updateFeaturedDandisetsFromChartData === 'function') {
+            const regionName = data.region_code || data.region_name || AppState.selectedRegionName;
+            // Create filtered data object with only active datasets
+            const filteredData = {
+                ...data,
+                top_datasets: filteredDatasets.filter(d => d !== 'OTHER'), // Remove 'OTHER' from top datasets list
+                dataset_totals: {}
+            };
+            
+            // Calculate totals for filtered datasets from time series data
+            filteredDatasets.forEach(dataset => {
+                if (dataset !== 'OTHER') {
+                    filteredData.dataset_totals[dataset] = 0;
+                    timeSeries.forEach(d => {
+                        filteredData.dataset_totals[dataset] += (d[dataset] || 0);
+                    });
+                }
+            });
+            
+            window.UI.updateFeaturedDandisetsFromChartData(filteredData, regionName);
+        }
     },
 
     addLegend(svg, datasets, colorScale, x, y) {

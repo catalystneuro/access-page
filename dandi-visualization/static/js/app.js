@@ -4,6 +4,8 @@ const AppState = {
     datasets: [],
     stats: {},
     selectedDataset: 'ALL',
+    startDate: null,
+    endDate: null,
     selectedRegion: null,
     map: null,
     charts: {},
@@ -129,9 +131,18 @@ const API = {
 
     async fetchRegions(datasetId = 'ALL') {
         try {
-            const url = datasetId === 'ALL' 
-                ? `${API_BASE}/regions` 
-                : `${API_BASE}/regions?dataset_id=${datasetId}`;
+            const params = new URLSearchParams();
+            if (datasetId !== 'ALL') {
+                params.append('dataset_id', datasetId);
+            }
+            if (AppState.startDate) {
+                params.append('start_date', AppState.startDate);
+            }
+            if (AppState.endDate) {
+                params.append('end_date', AppState.endDate);
+            }
+            
+            const url = `${API_BASE}/regions` + (params.toString() ? `?${params}` : '');
             const response = await fetch(url);
             if (!response.ok) throw new Error('Failed to fetch regions');
             return await response.json();
@@ -143,7 +154,19 @@ const API = {
 
     async fetchGlobalDownloads() {
         try {
-            const response = await fetch(`${API_BASE}/downloads/global`);
+            const params = new URLSearchParams();
+            if (AppState.selectedDataset !== 'ALL') {
+                params.append('dataset_id', AppState.selectedDataset);
+            }
+            if (AppState.startDate) {
+                params.append('start_date', AppState.startDate);
+            }
+            if (AppState.endDate) {
+                params.append('end_date', AppState.endDate);
+            }
+            
+            const url = `${API_BASE}/downloads/global` + (params.toString() ? `?${params}` : '');
+            const response = await fetch(url);
             if (!response.ok) throw new Error('Failed to fetch global downloads');
             return await response.json();
         } catch (error) {
@@ -155,7 +178,19 @@ const API = {
     async fetchRegionDownloads(regionCode) {
         try {
             const encodedRegionCode = encodeURIComponent(regionCode);
-            const response = await fetch(`${API_BASE}/downloads/region/${encodedRegionCode}`);
+            const params = new URLSearchParams();
+            if (AppState.selectedDataset !== 'ALL') {
+                params.append('dataset_id', AppState.selectedDataset);
+            }
+            if (AppState.startDate) {
+                params.append('start_date', AppState.startDate);
+            }
+            if (AppState.endDate) {
+                params.append('end_date', AppState.endDate);
+            }
+            
+            const url = `${API_BASE}/downloads/region/${encodedRegionCode}` + (params.toString() ? `?${params}` : '');
+            const response = await fetch(url);
             if (!response.ok) throw new Error('Failed to fetch region downloads');
             return await response.json();
         } catch (error) {
@@ -206,12 +241,29 @@ const UI = {
         const title = document.getElementById('chart-title');
         const globalBtn = document.getElementById('show-global-btn');
         
+        // Build title with date filter if active
+        let baseTitle;
         if (regionCode) {
-            title.textContent = `Downloads in ${regionName || regionCode}`;
+            baseTitle = `Downloads in ${regionName || regionCode}`;
             globalBtn.style.display = 'block';
         } else {
-            title.textContent = 'Global Downloads Over Time';
+            baseTitle = 'Global Downloads Over Time';
             globalBtn.style.display = 'none';
+        }
+        
+        // Add date filter to title
+        if (AppState.startDate || AppState.endDate) {
+            let dateRange = '';
+            if (AppState.startDate && AppState.endDate) {
+                dateRange = `${AppState.startDate} to ${AppState.endDate}`;
+            } else if (AppState.startDate) {
+                dateRange = `from ${AppState.startDate}`;
+            } else if (AppState.endDate) {
+                dateRange = `until ${AppState.endDate}`;
+            }
+            title.textContent = `${baseTitle} (${dateRange})`;
+        } else {
+            title.textContent = `${baseTitle} (All Time)`;
         }
     },
 
@@ -327,6 +379,88 @@ const UI = {
                 ${downloadInfo}
             </div>
         `;
+    },
+
+    async updateDatasetDetails(datasetId) {
+        const container = document.getElementById('dataset-details-container');
+        const panelTitle = document.querySelector('.dataset-details-panel h4');
+        
+        try {
+            container.innerHTML = '<div class="loading-message">Loading dataset details...</div>';
+            
+            // Fetch detailed dataset information
+            const response = await fetch(`${API_BASE}/dataset/${datasetId}/details`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch dataset details: ${response.status}`);
+            }
+            
+            const datasetInfo = await response.json();
+            
+            if (datasetInfo.error) {
+                throw new Error(datasetInfo.error);
+            }
+            
+            // Update panel title with dataset name
+            panelTitle.textContent = `${datasetInfo.id}: ${datasetInfo.name}`;
+            
+            // Create dataset details HTML (without the title since it's now in the header)
+            const contributorsHTML = datasetInfo.contributors_formatted && datasetInfo.contributors_formatted.length > 0 ? `
+                <div class="contributors-section">
+                    <div class="contributors-label">Contributors:</div>
+                    <div class="contributors-list">
+                        ${datasetInfo.contributors_formatted.map(contributor => 
+                            `<div class="contributor-item">${contributor}</div>`
+                        ).join('')}
+                        ${datasetInfo.contributors_count > 5 ? 
+                            `<div class="contributors-more">+ ${datasetInfo.contributors_count - 5} more contributors</div>` : ''
+                        }
+                    </div>
+                </div>
+            ` : '';
+            
+            container.innerHTML = `
+                <div class="dataset-details">
+                    ${datasetInfo.description ? `
+                        <div class="dataset-description">${datasetInfo.description}</div>
+                    ` : ''}
+                    
+                    <div class="dataset-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Total Downloads:</span>
+                            <span class="meta-value">${datasetInfo.total_bytes_formatted}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Regions:</span>
+                            <span class="meta-value">${Utils.formatNumber(datasetInfo.unique_regions)}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Countries:</span>
+                            <span class="meta-value">${Utils.formatNumber(datasetInfo.unique_countries)}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Version:</span>
+                            <span class="meta-value">${datasetInfo.version}</span>
+                        </div>
+                    </div>
+                    
+                    ${contributorsHTML}
+                    
+                    <a href="${datasetInfo.landing_url}" target="_blank" class="dataset-link">
+                        View on DANDI Archive
+                    </a>
+                </div>
+            `;
+            
+        } catch (error) {
+            console.error('Failed to load dataset details:', error);
+            panelTitle.textContent = 'Dataset Details';
+            container.innerHTML = `
+                <div class="error-message">
+                    Failed to load dataset details: ${error.message}
+                </div>
+            `;
+        }
     }
 };
 
@@ -365,7 +499,11 @@ const EventHandlers = {
         document.getElementById('reset-view').addEventListener('click', () => {
             AppState.selectedRegion = null;
             AppState.selectedDataset = 'ALL';
+            AppState.startDate = null;
+            AppState.endDate = null;
             document.getElementById('dataset-filter').value = 'ALL';
+            document.getElementById('start-date').value = '';
+            document.getElementById('end-date').value = '';
             document.getElementById('color-scheme').value = 'volume';
             document.getElementById('color-scheme').disabled = false; // Re-enable the dropdown
             AppState.colorScheme = 'volume';
@@ -386,6 +524,21 @@ const EventHandlers = {
             AppState.isCumulative = e.target.checked;
             App.refreshCurrentChart();
         });
+    },
+
+    setupDateFilters() {
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+        
+        startDateInput.addEventListener('change', Utils.debounce(async (e) => {
+            AppState.startDate = e.target.value || null;
+            await App.updateVisualization();
+        }, 300));
+        
+        endDateInput.addEventListener('change', Utils.debounce(async (e) => {
+            AppState.endDate = e.target.value || null;
+            await App.updateVisualization();
+        }, 300));
     }
 };
 
@@ -397,6 +550,7 @@ const App = {
             
             // Initialize event handlers
             EventHandlers.setupDatasetFilter();
+            EventHandlers.setupDateFilters();
             EventHandlers.setupColorSchemeSelector();
             EventHandlers.setupResetButton();
             EventHandlers.setupShowGlobalButton();
@@ -462,11 +616,25 @@ const App = {
         try {
             Utils.showLoading();
             
-            // Update regions based on selected dataset
+            // Update regions based on selected dataset and date filters
             AppState.regions = await API.fetchRegions(AppState.selectedDataset);
             
-            // Update map
+            // Update map with new regions data
             MapVisualization.updateRegions(AppState.regions);
+            
+            // Show/hide panels based on dataset selection
+            const featuredPanel = document.querySelector('.featured-dandisets-panel');
+            const datasetDetailsPanel = document.querySelector('.dataset-details-panel');
+            
+            if (AppState.selectedDataset !== 'ALL') {
+                featuredPanel.style.display = 'none';
+                datasetDetailsPanel.style.display = 'block';
+                // Load dataset details
+                await UI.updateDatasetDetails(AppState.selectedDataset);
+            } else {
+                featuredPanel.style.display = 'block';
+                datasetDetailsPanel.style.display = 'none';
+            }
             
             // Update chart based on current state
             if (!AppState.selectedRegion) {
@@ -474,6 +642,22 @@ const App = {
                 const globalData = await API.fetchGlobalDownloads();
                 ChartsVisualization.renderMainChart(globalData);
                 UI.updateChartTitle(null);
+            } else {
+                // Check if selected region still exists in filtered data
+                const regionExists = AppState.regions.some(r => r.code === AppState.selectedRegion);
+                if (!regionExists) {
+                    // If selected region no longer exists due to filtering, show global data
+                    AppState.selectedRegion = null;
+                    AppState.selectedRegionName = null;
+                    const globalData = await API.fetchGlobalDownloads();
+                    ChartsVisualization.renderMainChart(globalData);
+                    UI.updateChartTitle(null);
+                } else {
+                    // Update region chart if a region is selected and still exists
+                    const regionData = await API.fetchRegionDownloads(AppState.selectedRegion);
+                    ChartsVisualization.renderMainChart(regionData);
+                    UI.updateChartTitle(AppState.selectedRegion, AppState.selectedRegionName);
+                }
             }
             
             Utils.hideLoading();
@@ -525,10 +709,12 @@ const App = {
                 // Refresh region chart
                 const regionData = await API.fetchRegionDownloads(AppState.selectedRegion);
                 ChartsVisualization.renderMainChart(regionData);
+                UI.updateChartTitle(AppState.selectedRegion, AppState.selectedRegionName);
             } else {
                 // Refresh global chart
                 const globalData = await API.fetchGlobalDownloads();
                 ChartsVisualization.renderMainChart(globalData);
+                UI.updateChartTitle(null);
             }
         } catch (error) {
             Utils.showError('Failed to refresh chart');

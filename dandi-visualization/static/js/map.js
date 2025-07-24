@@ -1,4 +1,4 @@
-// Map visualization module
+// Map visualization module - v2.0
 const MapVisualization = {
     map: null,
     markersLayer: null,

@@ -47,6 +47,14 @@
                 </select>
             </div>
             <div class="control-group">
+                <label for="start-date">Start Date:</label>
+                <input type="date" id="start-date" min="2021-01-01" max="2025-12-31">
+            </div>
+            <div class="control-group">
+                <label for="end-date">End Date:</label>
+                <input type="date" id="end-date" min="2021-01-01" max="2025-12-31">
+            </div>
+            <div class="control-group">
                 <label for="color-scheme">Color by:</label>
                 <select id="color-scheme">
                     <option value="volume">Data Volume</option>
@@ -100,20 +108,28 @@
                 
                 <!-- Chart and Featured Dandisets Container -->
                 <div class="chart-content-container">
+                    <!-- Featured Dandisets Panel -->
+                    <div class="featured-dandisets-panel">
+                        <h4>Featured Dandisets</h4>
+                        <div id="featured-dandisets-container" class="featured-dandisets-container">
+                            <div class="loading-message">Loading featured dandisets...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Dataset Details Panel (shown when single dataset selected) -->
+                    <div class="dataset-details-panel" style="display: none;">
+                        <h4>Dataset Details</h4>
+                        <div id="dataset-details-container" class="dataset-details-container">
+                            <div class="loading-message">Loading dataset details...</div>
+                        </div>
+                    </div>
+                    
                     <!-- Chart Container -->
                     <div class="chart-container">
                         <div id="main-chart" class="chart">
                             <div class="empty-state">
                                 <p>Loading download data...</p>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Featured Dandisets Panel -->
-                    <div class="featured-dandisets-panel">
-                        <h4>Featured Dandisets</h4>
-                        <div id="featured-dandisets-container" class="featured-dandisets-container">
-                            <div class="loading-message">Loading featured dandisets...</div>
                         </div>
                     </div>
                 </div>
