@@ -381,9 +381,9 @@ const MapVisualization = {
     // Static thresholds for volume-based coloring (in bytes)
     getVolumeThresholds() {
         return {
-            threshold1: 1048576,        // 1 MB
-            threshold2: 104857600,      // 100 MB
-            threshold3: 1099511627776   // 1 TB
+            threshold1: 10485760,       // 10 MB
+            threshold2: 10737418240,    // 10 GB
+            threshold3: 10995116277760  // 10 TB
         };
     },
 
@@ -392,13 +392,13 @@ const MapVisualization = {
         const thresholds = this.getVolumeThresholds();
         
         if (totalBytes <= thresholds.threshold1) {
-            return 'low';               // ≤ 1 MB
+            return 'low';               // ≤ 10 MB
         } else if (totalBytes <= thresholds.threshold2) {
-            return 'medium';            // 1 MB - 100 MB
+            return 'medium';            // 10 MB - 10 GB
         } else if (totalBytes <= thresholds.threshold3) {
-            return 'high';              // 100 MB - 1 TB
+            return 'high';              // 10 GB - 10 TB
         } else {
-            return 'very-high';         // > 1 TB
+            return 'very-high';         // > 10 TB
         }
     },
 
