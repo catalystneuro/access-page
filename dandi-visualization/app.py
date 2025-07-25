@@ -334,7 +334,7 @@ def get_datasets():
     datasets = []
     for _, row in dataset_stats.iterrows():
         datasets.append({
-            'id': str(int(row['id'])),
+            'id': str(int(row['id'])).zfill(6),  # Zero-pad to 6 digits
             'total_bytes': int(row['total_bytes']),
             'total_bytes_formatted': format_bytes(row['total_bytes']),
             'unique_regions': int(row['unique_regions']),
