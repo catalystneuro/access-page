@@ -307,28 +307,12 @@ const MapVisualization = {
         }
 
         if (this.colorScheme === 'datasets') {
-            // Legend for dataset count
-            const maxDatasets = Math.max(...regions.map(r => r.dataset_count));
-            const minDatasets = Math.min(...regions.map(r => r.dataset_count));
-            
-            // Calculate logarithmic ranges for dataset count
-            const logMax = Math.log(Math.max(maxDatasets, 1));
-            const logMin = Math.log(Math.max(minDatasets, 1));
-            const logRange = logMax - logMin;
-            
-            // Calculate the actual thresholds that correspond to normalized values 0.2, 0.4, 0.6, 0.8
-            // These are the exact values used in the getColor method for color assignment
-            const actualThreshold1 = Math.exp(logMin + logRange * 0.2);
-            const actualThreshold2 = Math.exp(logMin + logRange * 0.4);
-            const actualThreshold3 = Math.exp(logMin + logRange * 0.6);
-            const actualThreshold4 = Math.exp(logMin + logRange * 0.8);
-            
-            // Update legend text with dataset count ranges that exactly match color boundaries
+            // Fixed legend categories for dataset count
             if (legendItems.length >= 4) {
-                legendItems[0].textContent = `${minDatasets} - ${Math.ceil(actualThreshold1)} datasets`;
-                legendItems[1].textContent = `${Math.ceil(actualThreshold1) + 1} - ${Math.ceil(actualThreshold2)} datasets`;
-                legendItems[2].textContent = `${Math.ceil(actualThreshold2) + 1} - ${Math.ceil(actualThreshold3)} datasets`;
-                legendItems[3].textContent = `${Math.ceil(actualThreshold3) + 1} - ${maxDatasets} datasets`;
+                legendItems[0].textContent = '1';
+                legendItems[1].textContent = '1-10';
+                legendItems[2].textContent = '11-100';
+                legendItems[3].textContent = '≥100';
             }
         } else {
             // Legend for data volume - use centralized category system for perfect consistency
@@ -455,32 +439,28 @@ const MapVisualization = {
     // Method to get color based on the selected scheme
     getColor(value, scheme, region = null) {
         if (scheme === 'datasets') {
-            // For datasets, use normalized value (0-1) as before
-            const clampedValue = Math.max(0, Math.min(1, value));
-            // Green to magenta gradient for dataset count (completely different from volume)
-            if (clampedValue <= 0.2) {
+            // For datasets, use actual dataset count to match fixed legend categories
+            const datasetCount = region ? region.dataset_count : 1;
+            
+            // Map to fixed categories: 1, 1-10, 11-100, ≥100
+            if (datasetCount === 1) {
                 return {
-                    fill: '#4caf50',     // Green
+                    fill: '#4caf50',     // Green for exactly 1 dataset
                     stroke: '#388e3c'     // Dark green
                 };
-            } else if (clampedValue <= 0.4) {
+            } else if (datasetCount >= 2 && datasetCount <= 10) {
                 return {
-                    fill: '#8bc34a',     // Light green
-                    stroke: '#689f38'     // Darker light green
-                };
-            } else if (clampedValue <= 0.6) {
-                return {
-                    fill: '#cddc39',     // Lime
+                    fill: '#cddc39',     // Lime for 2-10 range (to complete 1-10 category)
                     stroke: '#9e9d24'     // Dark lime
                 };
-            } else if (clampedValue <= 0.8) {
+            } else if (datasetCount >= 11 && datasetCount <= 100) {
                 return {
-                    fill: '#e91e63',     // Pink
+                    fill: '#e91e63',     // Pink for 11-100 range
                     stroke: '#ad1457'     // Dark pink
                 };
-            } else {
+            } else { // datasetCount >= 100
                 return {
-                    fill: '#9c27b0',     // Purple/Magenta
+                    fill: '#9c27b0',     // Purple/Magenta for ≥100 range
                     stroke: '#7b1fa2'     // Dark purple
                 };
             }
